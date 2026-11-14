@@ -1303,7 +1303,9 @@ public class IrisComplex implements DataProvider {
                     configurationName + " fluidPalette must resolve at least one fluid block");
         }
         for (NativeBlockState block : blocks) {
-            if (block == null || !allowSolids && !block.isFluid()) {
+            // Atherma patch: an air-only profile is a dry channel, so dried riverbeds and lake beds
+            // can be laid out by the same drainage planner as living water.
+            if (block == null || !allowSolids && !block.isFluid() && !art.arcane.iris.generation.block.B.isAir(block)) {
                 throw new IllegalArgumentException(
                         configurationName + " fluidPalette may contain only fluid blocks");
             }
