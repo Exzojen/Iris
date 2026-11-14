@@ -12,6 +12,12 @@ final class PlacementModuleVacuum implements PlacementModule {
     static final PlacementLifecycleDependency COLLECT = new PlacementLifecycleDependency("vacuum.collect");
     static final PlacementLifecycleDependency FINISH = new PlacementLifecycleDependency("vacuum.finish");
     private static final long VACUUM_WAVE_SEED = 7392113L;
+    /** Atherma patch: how many blocks of the original surface stack are carried onto bent columns. */
+    private static final int SURFACE_SKIN_DEPTH = 4;
+
+    private static boolean isSkin(NativeBlockState state) {
+        return state != null && !B.isAir(state) && state.isSolid();
+    }
 
     @Override
     public void install(PlacementLifecycleBuilder lifecycle) {
@@ -70,19 +76,42 @@ final class PlacementModuleVacuum implements PlacementModule {
                     continue;
                 }
                 targetY = Math.max(worldMin + 1, Math.min(worldMax, targetY));
+                // Atherma patch: remember the surface skin of the column before bending it, then put
+                // the same skin back on top of the bent column, so raised or carved terrain keeps the
+                // biome surface instead of exposing bare rock.
+                NativeBlockState[] skin = new NativeBlockState[SURFACE_SKIN_DEPTH];
+                for (int k = 0; k < SURFACE_SKIN_DEPTH; k++) {
+                    int sy = origY - k;
+                    skin[k] = sy > worldMin ? placer.get(cx, sy, cz) : null;
+                }
                 if (targetY > origY) {
                     NativeBlockState fill = complex != null ? complex.getRockStream().get(cx, cz) : null;
                     if (B.isAir(fill)) {
                         fill = IrisObject.States.stone();
                     }
                     for (int yy = origY + 1; yy <= targetY; yy++) {
-                        placer.set(cx, yy, cz, fill);
+                        int depth = targetY - yy;
+                        NativeBlockState layer = depth < SURFACE_SKIN_DEPTH ? skin[depth] : null;
+                        placer.set(cx, yy, cz, isSkin(layer) ? layer : fill);
                     }
                 } else if (targetY < origY) {
                     boolean inside = IrisObjectVacuum.outset(dx, lowX, highX) == 0 && IrisObjectVacuum.outset(dz, lowZ, highZ) == 0;
                     int carveFloor = IrisObjectVacuum.carveFloorY(targetY, topY, inside);
                     for (int yy = origY; yy >= carveFloor; yy--) {
                         placer.set(cx, yy, cz, IrisObject.States.air());
+                    }
+                    if (!inside) {
+                        for (int k = 0; k < SURFACE_SKIN_DEPTH; k++) {
+                            int yy = carveFloor - 1 - k;
+                            if (yy <= worldMin || !isSkin(skin[k])) {
+                                break;
+                            }
+                            NativeBlockState existing = placer.get(cx, yy, cz);
+                            if (existing == null || !existing.isSolid()) {
+                                break;
+                            }
+                            placer.set(cx, yy, cz, skin[k]);
+                        }
                     }
                 }
             }
