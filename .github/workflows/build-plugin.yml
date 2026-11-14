@@ -1,0 +1,37 @@
+name: build-plugin
+
+on:
+  push:
+    branches: [atherma-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Build the Bukkit plugin jar
+        run: |
+          chmod +x gradlew
+          ./gradlew packedJar --no-daemon --console=plain
+
+      - name: List built jars
+        if: always()
+        run: find . -name '*.jar' -path '*build*' -size +1M -not -path './buildSrc/*' -not -path '*/.gradle/*' | sort
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: iris-bukkit
+          if-no-files-found: warn
+          path: |
+            build/**/*.jar
+            adapters/bukkit/plugin/build/**/*.jar
+            core/build/libs/*.jar
