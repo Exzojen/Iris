@@ -41,6 +41,38 @@ public class IrisPostModifier extends EngineAssignedModifier<NativeBlockState> {
     private static final BoundBlockState AIR = BoundBlockState.of("AIR");
 
     private final RNG rng;
+    // Atherma: per biome, the slab that goes on each ground block
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.Map<String, NativeBlockState>> slabMatchCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private NativeBlockState matchedSlab(IrisBiome biome, NativeBlockState ground) {
+        String biomeKey = String.valueOf(biome.getLoadKey());
+        java.util.Map<String, NativeBlockState> map = slabMatchCache.get(biomeKey);
+        if (map == null) {
+            map = new java.util.HashMap<>();
+            if (biome.getSlabMatches() != null) {
+                for (String pair : biome.getSlabMatches()) {
+                    int at = pair == null ? -1 : pair.indexOf('=');
+                    if (at <= 0) {
+                        continue;
+                    }
+                    NativeBlockState slab = B.getStateOrNull(pair.substring(at + 1).trim());
+                    if (slab != null) {
+                        map.put(pair.substring(0, at).trim(), slab);
+                    }
+                }
+            }
+            for (NativeBlockState slab : biome.getSlab().getBlockData(getData())) {
+                String key = IrisProceduralBlocks.materialKey(slab);
+                if (key.endsWith("_slab")) {
+                    String base = key.substring(0, key.length() - 5);
+                    map.putIfAbsent(base, slab);
+                    map.putIfAbsent(base + "s", slab);
+                }
+            }
+            slabMatchCache.put(biomeKey, map);
+        }
+        return map.get(IrisProceduralBlocks.materialKey(ground));
+    }
 
     public IrisPostModifier(Engine engine) {
         super(engine, "Post");
@@ -242,6 +274,14 @@ public class IrisPostModifier extends EngineAssignedModifier<NativeBlockState> {
             {
                 IrisSlopeClip sc = biome.getSlab().getSlopeCondition();
                 NativeBlockState d = sc.isValid(getComplex().getSlopeStream().get(x, z)) ? biome.getSlab().get(rng, x, h, z, getData()) : null;
+
+                if (d != null && !B.isAir(d)) {
+                    // Atherma: the step is made of the ground it lies on, not of a noise pick
+                    NativeBlockState matched = matchedSlab(biome, getPostBlock(x, h, z, originX, originZ, currentData));
+                    if (matched != null) {
+                        d = matched;
+                    }
+                }
 
                 if (d != null) {
                     boolean cancel = B.isAir(d);

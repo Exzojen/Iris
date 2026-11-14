@@ -205,6 +205,9 @@ public class IrisBiome extends IrisRegistrant implements Rarity {
     private int caveMinDepthBelowSurface = 0;
     @Description("The default slab if iris decides to place a slab in this biome. Default is no slab.")
     private IrisBiomePaletteLayer slab = new IrisBiomePaletteLayer().zero();
+    @ArrayType(type = String.class)
+    @Description("Atherma: slab chosen by the block it sits on, as block=slab pairs such as minecraft:coarse_dirt=minecraft:petrified_oak_slab. A block with no pair takes its own _slab block when the slab palette lists it, otherwise the slab palette decides.")
+    private KList<String> slabMatches = new KList<>();
     @Description("The default wall if iris decides to place a wall higher than 2 blocks (steep hills or possibly cliffs)")
     private IrisBiomePaletteLayer wall = new IrisBiomePaletteLayer().zero();
     @Required
