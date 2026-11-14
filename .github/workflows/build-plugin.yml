@@ -20,7 +20,7 @@ jobs:
       - name: Build the Bukkit plugin jar
         run: |
           chmod +x gradlew
-          ./gradlew packedJar --no-daemon --console=plain
+          ./gradlew packedJar --no-daemon --no-parallel --console=plain --stacktrace
 
       - name: List built jars
         if: always()
