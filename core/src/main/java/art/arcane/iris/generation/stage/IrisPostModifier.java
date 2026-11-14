@@ -41,37 +41,55 @@ public class IrisPostModifier extends EngineAssignedModifier<NativeBlockState> {
     private static final BoundBlockState AIR = BoundBlockState.of("AIR");
 
     private final RNG rng;
-    // Atherma: per biome, the slab that goes on each ground block
+    // Atherma: per biome, the slab that goes on each ground block; air means no slab
     private final java.util.concurrent.ConcurrentHashMap<String, java.util.Map<String, NativeBlockState>> slabMatchCache = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private NativeBlockState matchedSlab(IrisBiome biome, NativeBlockState ground) {
+    private java.util.Map<String, NativeBlockState> slabMatches(IrisBiome biome) {
         String biomeKey = String.valueOf(biome.getLoadKey());
         java.util.Map<String, NativeBlockState> map = slabMatchCache.get(biomeKey);
         if (map == null) {
-            map = new java.util.HashMap<>();
+            map = new java.util.concurrent.ConcurrentHashMap<>();
             if (biome.getSlabMatches() != null) {
                 for (String pair : biome.getSlabMatches()) {
                     int at = pair == null ? -1 : pair.indexOf('=');
                     if (at <= 0) {
                         continue;
                     }
-                    NativeBlockState slab = B.getStateOrNull(pair.substring(at + 1).trim());
+                    String value = pair.substring(at + 1).trim();
+                    NativeBlockState slab = value.equalsIgnoreCase("none") ? B.getAirState() : B.getStateOrNull(value);
                     if (slab != null) {
                         map.put(pair.substring(0, at).trim(), slab);
                     }
                 }
             }
-            for (NativeBlockState slab : biome.getSlab().getBlockData(getData())) {
-                String key = IrisProceduralBlocks.materialKey(slab);
-                if (key.endsWith("_slab")) {
-                    String base = key.substring(0, key.length() - 5);
-                    map.putIfAbsent(base, slab);
-                    map.putIfAbsent(base + "s", slab);
-                }
-            }
             slabMatchCache.put(biomeKey, map);
         }
-        return map.get(IrisProceduralBlocks.materialKey(ground));
+        return map;
+    }
+
+    /** The slab for this ground block, air for no slab, or null where the biome does not match slabs at all. */
+    private NativeBlockState matchedSlab(IrisBiome biome, NativeBlockState ground) {
+        if (biome.getSlabMatches() == null || biome.getSlabMatches().isEmpty()) {
+            return null;
+        }
+        java.util.Map<String, NativeBlockState> map = slabMatches(biome);
+        String key = IrisProceduralBlocks.materialKey(ground);
+        NativeBlockState slab = map.get(key);
+        if (slab == null) {
+            // the block's own slab: cobblestone -> cobblestone_slab, mud_bricks -> mud_brick_slab
+            slab = B.getStateOrNull(key + "_slab", false);
+            if (slab == null && key.endsWith("s")) {
+                slab = B.getStateOrNull(key.substring(0, key.length() - 1) + "_slab", false);
+            }
+            if (slab == null) {
+                slab = map.get("*");
+            }
+            if (slab == null) {
+                slab = B.getAirState();
+            }
+            map.put(key, slab);
+        }
+        return slab;
     }
 
     public IrisPostModifier(Engine engine) {
@@ -276,7 +294,7 @@ public class IrisPostModifier extends EngineAssignedModifier<NativeBlockState> {
                 NativeBlockState d = sc.isValid(getComplex().getSlopeStream().get(x, z)) ? biome.getSlab().get(rng, x, h, z, getData()) : null;
 
                 if (d != null && !B.isAir(d)) {
-                    // Atherma: the step is made of the ground it lies on, not of a noise pick
+                    // Atherma: the palette says a slab may stand here; the ground it lies on says what it is made of
                     NativeBlockState matched = matchedSlab(biome, getPostBlock(x, h, z, originX, originZ, currentData));
                     if (matched != null) {
                         d = matched;
